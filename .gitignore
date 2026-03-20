@@ -1,0 +1,29 @@
+# ─── Gradle ───────────────────────────────────────────
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ─── NeoForge / Minecraft ──────────────────────────────
+run/          # runClient / runServer の実行ディレクトリ
+.cache/
+out/
+
+# ─── IDE ───────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+bin/
+
+# ─── OS ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── ログ ──────────────────────────────────────────────
+*.log
+logs/

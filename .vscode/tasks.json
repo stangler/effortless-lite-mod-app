@@ -1,0 +1,96 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        // ─────────────────────────────────────────────
+        // ビルド系
+        // ─────────────────────────────────────────────
+        {
+            "label": "Build JAR",
+            "type": "shell",
+            "command": "./gradlew build --no-daemon",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$java"
+        },
+        {
+            "label": "Compile Java",
+            "type": "shell",
+            "command": "./gradlew compileJava --no-daemon",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$java"
+        },
+        {
+            "label": "Clean",
+            "type": "shell",
+            "command": "./gradlew clean --no-daemon",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+
+        // ─────────────────────────────────────────────
+        // 実行系
+        // ─────────────────────────────────────────────
+        {
+            "label": "Run Client",
+            "type": "shell",
+            // headless 環境で runClient すると失敗するため、
+            // サーバーのみ VS Code タスクから直接起動する
+            "command": "echo '⚠️  runClient はローカルPC上で実行してください。\\nVS Codeのターミナルで: ./gradlew runClient'",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run Server",
+            "type": "shell",
+            "command": "./gradlew runServer --no-daemon",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^.*ERROR.*$",
+                    "message": 0
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Starting minecraft server",
+                    "endsPattern": "Done \\("
+                }
+            }
+        },
+
+        // ─────────────────────────────────────────────
+        // 開発補助
+        // ─────────────────────────────────────────────
+        {
+            "label": "Download Dependencies",
+            "type": "shell",
+            "command": "./gradlew dependencies --no-daemon",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        }
+    ]
+}

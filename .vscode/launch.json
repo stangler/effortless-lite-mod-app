@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        // ─────────────────────────────────────────────
+        // Minecraft サーバーのリモートデバッグ
+        //
+        // 使い方:
+        //  1. ターミナルで以下を実行:
+        //     JAVA_TOOL_OPTIONS="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" \
+        //       ./gradlew runServer --no-daemon
+        //  2. このデバッグ設定を起動する
+        // ─────────────────────────────────────────────
+        {
+            "type": "java",
+            "name": "Attach to Minecraft Server (Port 5005)",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5005,
+            "projectName": "effortless-lite"
+        }
+    ]
+}

@@ -1,0 +1,83 @@
+{
+    "name": "Effortless Lite - NeoForge Mod Dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+
+    // ─────────────────────────────────────────────
+    // VS Code 拡張機能
+    // ─────────────────────────────────────────────
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                // Java 開発必須
+                "vscjava.vscode-java-pack",       // Java Extension Pack (Language Server + Debugger + Test)
+                "vscjava.vscode-gradle",           // Gradle タスクビュー
+
+                // 便利ツール
+                "redhat.vscode-xml",               // neoforge.mods.toml / pack.mcmeta の XML補完
+                "streetsidesoftware.code-spell-checker",
+                "usernamehw.errorlens",            // インライン エラー表示
+                "gruntfuss.vscode-nbt"             // NBT/Minecraft ファイルビューア
+            ],
+            "settings": {
+                // ─ Java ─
+                "java.jdt.ls.java.home": "/opt/java/openjdk",
+                "java.configuration.runtimes": [
+                    {
+                        "name": "JavaSE-21",
+                        "path": "/opt/java/openjdk",
+                        "default": true
+                    }
+                ],
+                "java.compile.nullAnalysis.mode": "automatic",
+                "java.format.settings.profile": "GoogleStyle",
+
+                // ─ Gradle ─
+                "java.import.gradle.enabled": true,
+                "java.import.gradle.wrapper.enabled": true,
+                "java.import.gradle.java.home": "/opt/java/openjdk",
+                "gradle.nestedProjects": true,
+
+                // ─ エディタ ─
+                "editor.tabSize": 4,
+                "editor.insertSpaces": true,
+                "editor.formatOnSave": true,
+                "editor.rulers": [120],
+                "files.trimTrailingWhitespace": true,
+                "files.encoding": "utf8"
+            }
+        }
+    },
+
+    // ─────────────────────────────────────────────
+    // コンテナ起動後の初期化
+    // ─────────────────────────────────────────────
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+    // ─────────────────────────────────────────────
+    // ポートフォワード
+    //  25565: Minecraft サーバー (runServer 時に使用)
+    // ─────────────────────────────────────────────
+    "forwardPorts": [25565],
+    "portsAttributes": {
+        "25565": {
+            "label": "Minecraft Server",
+            "onAutoForward": "silent"
+        }
+    },
+
+    // ─────────────────────────────────────────────
+    // コンテナ内ユーザー
+    // ─────────────────────────────────────────────
+    "remoteUser": "mcdev",
+
+    // ─────────────────────────────────────────────
+    // 環境変数
+    // ─────────────────────────────────────────────
+    "remoteEnv": {
+        "GRADLE_OPTS": "-Xmx4g -Dfile.encoding=UTF-8",
+        "JAVA_HOME": "/opt/java/openjdk"
+    }
+}
