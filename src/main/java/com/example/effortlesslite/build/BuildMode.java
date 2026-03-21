@@ -1,33 +1,56 @@
 package com.example.effortlesslite.build;
 
-/**
- * ビルドモード列挙型
- * NORMAL  : 通常の1ブロック配置
- * LINE    : 始点→終点の直線
- * WALL    : 始点→終点の垂直な壁
- * FLOOR   : 始点→終点の水平な床
- * CUBE    : 始点→終点の立方体 (全埋め)
- */
 public enum BuildMode {
-    NORMAL("Normal"),
-    LINE("Line"),
-    WALL("Wall"),
-    FLOOR("Floor"),
-    CUBE("Cube");
+    NORMAL,
+    LINE,
+    WALL,
+    FLOOR,
+    CUBE,
+    ERASE_NORMAL,
+    ERASE_LINE,
+    ERASE_WALL,
+    ERASE_FLOOR,
+    ERASE_CUBE;
 
-    private final String displayName;
-
-    BuildMode(String displayName) {
-        this.displayName = displayName;
+    /** 削除モードかどうか */
+    public boolean isErase() {
+        return this.ordinal() >= ERASE_NORMAL.ordinal();
     }
 
-    public String getDisplayName() {
-        return displayName;
+    /**
+     * 対応するベースモードを返す。
+     * 削除モードでも BlockCalculator の計算はベースモードで行う。
+     */
+    public BuildMode toBaseMode() {
+        return switch (this) {
+            case ERASE_NORMAL -> NORMAL;
+            case ERASE_LINE   -> LINE;
+            case ERASE_WALL   -> WALL;
+            case ERASE_FLOOR  -> FLOOR;
+            case ERASE_CUBE   -> CUBE;
+            default           -> this;
+        };
     }
 
-    /** 次のモードに循環切り替え */
+    /** Gキーで次のモードへ進む */
     public BuildMode next() {
-        BuildMode[] values = values();
-        return values[(ordinal() + 1) % values.length];
+        BuildMode[] values = BuildMode.values();
+        return values[(this.ordinal() + 1) % values.length];
+    }
+
+    /** HUD・ログ表示用の名前（既存コードの getDisplayName() に合わせる） */
+    public String getDisplayName() {
+        return switch (this) {
+            case NORMAL       -> "Normal";
+            case LINE         -> "Line";
+            case WALL         -> "Wall";
+            case FLOOR        -> "Floor";
+            case CUBE         -> "Cube";
+            case ERASE_NORMAL -> "削除: Normal";
+            case ERASE_LINE   -> "削除: Line";
+            case ERASE_WALL   -> "削除: Wall";
+            case ERASE_FLOOR  -> "削除: Floor";
+            case ERASE_CUBE   -> "削除: Cube";
+        };
     }
 }

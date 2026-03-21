@@ -3,6 +3,7 @@ package com.example.effortlesslite.server;
 import com.example.effortlesslite.build.BuildMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 
@@ -14,7 +15,10 @@ import java.util.*;
  *  - Undo スタック (最大20操作)
  *  - Redo スタック
  *
- * データはサーバーのメモリ上に保持し、ログアウト時に破棄される。
+ * Undo/Redo エントリは Map<BlockPos, BlockState> で統一管理する:
+ *   - ブロック配置のUndo: { pos → AIR }    → Undoで空気に戻す
+ *   - ブロック削除のUndo: { pos → 元State } → Undoで元のブロックに戻す
+ *   どちらも「マップの値の状態に戻す」という操作で統一されている。
  */
 public class PlayerBuildData {
 
@@ -32,9 +36,9 @@ public class PlayerBuildData {
     // プレイヤーごとのデータ (UUID → 各データ)
     // ─────────────────────────────────────────────
 
-    private static final Map<UUID, BuildMode>              playerModes    = new HashMap<>();
-    private static final Map<UUID, Deque<List<BlockPos>>>  undoStacks     = new HashMap<>();
-    private static final Map<UUID, Deque<List<BlockPos>>>  redoStacks     = new HashMap<>();
+    private static final Map<UUID, BuildMode>                            playerModes = new HashMap<>();
+    private static final Map<UUID, Deque<Map<BlockPos, BlockState>>>     undoStacks  = new HashMap<>();
+    private static final Map<UUID, Deque<Map<BlockPos, BlockState>>>     redoStacks  = new HashMap<>();
 
     // ─────────────────────────────────────────────
     // ビルドモード
@@ -53,47 +57,93 @@ public class PlayerBuildData {
     // ─────────────────────────────────────────────
 
     /**
-     * 操作履歴をUndoスタックに積む。
-     * Redoスタックはクリアされる (新しい操作をするとRedoは消える)。
+     * ブロック配置操作をUndoスタックに積む。
+     * 「Undoしたときにこれらの座標を空気に戻す」という情報を保存する。
      *
      * @param uuid      プレイヤーUUID
-     * @param positions 配置したブロックの座標リスト (後でUndoで削除する)
+     * @param positions 配置したブロックの座標リスト
      */
-    public static void pushUndo(UUID uuid, List<BlockPos> positions) {
-        Deque<List<BlockPos>> undo = undoStacks.computeIfAbsent(uuid, k -> new ArrayDeque<>());
-        undo.push(new ArrayList<>(positions));
-        // スタックがあふれたら一番古い操作を削除
-        while (undo.size() > MAX_HISTORY) undo.pollLast();
-        // 新しい操作をしたのでRedoをクリア
-        getRedoStack(uuid).clear();
+    public static void pushPlaceUndo(UUID uuid, List<BlockPos> positions,
+                                     net.minecraft.server.level.ServerLevel level) {
+        if (positions.isEmpty()) return;
+        // 配置前の状態（=AIR）をスナップショットとして保存
+        // ※ このメソッドは配置「後」に呼ばれるため、現在は配置済み状態だが
+        //   Undoで戻す先は AIR なので AIR を記録する
+        Map<BlockPos, BlockState> snapshot = new LinkedHashMap<>();
+        for (BlockPos pos : positions) {
+            snapshot.put(pos.immutable(), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
+        pushUndo(uuid, snapshot);
     }
 
     /**
-     * Undo: 最後に配置したブロック群の座標を取り出す。
-     * 取り出した座標はRedoスタックに積まれる。
+     * ブロック削除操作をUndoスタックに積む。
+     * 「Undoしたときにこれらの座標を元の状態に戻す」という情報を保存する。
      *
-     * @return 削除すべきブロック座標リスト。スタックが空の場合は null
+     * @param uuid     プレイヤーUUID
+     * @param snapshot 削除前のブロック状態 { pos → 元のBlockState }
      */
-    public static List<BlockPos> popUndo(UUID uuid) {
-        Deque<List<BlockPos>> undo = undoStacks.get(uuid);
-        if (undo == null || undo.isEmpty()) return null;
-        List<BlockPos> positions = undo.pop();
-        getRedoStack(uuid).push(new ArrayList<>(positions));
-        return positions;
+    public static void pushEraseUndo(UUID uuid, Map<BlockPos, BlockState> snapshot) {
+        if (snapshot.isEmpty()) return;
+        pushUndo(uuid, snapshot);
     }
 
     /**
-     * Redo: Undoで取り消した操作の座標を取り出す。
-     * 取り出した座標はUndoスタックに再度積まれる。
+     * Undo を実行する。
+     * スタックから取り出したマップの通りにブロックを復元する。
+     * 復元前の状態を Redo スタックに積む。
      *
-     * @return 再配置すべきブロック座標リスト。スタックが空の場合は null
+     * @param uuid  プレイヤーUUID
+     * @param level サーバーレベル
+     * @return Undo が実行されたか
      */
-    public static List<BlockPos> popRedo(UUID uuid) {
-        Deque<List<BlockPos>> redo = redoStacks.get(uuid);
-        if (redo == null || redo.isEmpty()) return null;
-        List<BlockPos> positions = redo.pop();
-        getUndoStack(uuid).push(new ArrayList<>(positions));
-        return positions;
+    public static boolean performUndo(UUID uuid, net.minecraft.server.level.ServerLevel level) {
+        Deque<Map<BlockPos, BlockState>> undo = undoStacks.get(uuid);
+        if (undo == null || undo.isEmpty()) return false;
+
+        Map<BlockPos, BlockState> restore = undo.pop();
+
+        // Redo 用：復元前の現在状態をキャプチャ
+        Map<BlockPos, BlockState> redoSnapshot = new LinkedHashMap<>();
+        for (BlockPos pos : restore.keySet()) {
+            redoSnapshot.put(pos, level.getBlockState(pos));
+        }
+        getRedoStack(uuid).push(redoSnapshot);
+
+        // 復元実行
+        for (Map.Entry<BlockPos, BlockState> e : restore.entrySet()) {
+            level.setBlock(e.getKey(), e.getValue(), 3);
+        }
+        return true;
+    }
+
+    /**
+     * Redo を実行する。
+     * スタックから取り出したマップの通りにブロックを復元する。
+     * 復元前の状態を Undo スタックに積む。
+     *
+     * @param uuid  プレイヤーUUID
+     * @param level サーバーレベル
+     * @return Redo が実行されたか
+     */
+    public static boolean performRedo(UUID uuid, net.minecraft.server.level.ServerLevel level) {
+        Deque<Map<BlockPos, BlockState>> redo = redoStacks.get(uuid);
+        if (redo == null || redo.isEmpty()) return false;
+
+        Map<BlockPos, BlockState> restore = redo.pop();
+
+        // Undo 用：復元前の現在状態をキャプチャ
+        Map<BlockPos, BlockState> undoSnapshot = new LinkedHashMap<>();
+        for (BlockPos pos : restore.keySet()) {
+            undoSnapshot.put(pos, level.getBlockState(pos));
+        }
+        getUndoStack(uuid).push(undoSnapshot);
+
+        // 復元実行
+        for (Map.Entry<BlockPos, BlockState> e : restore.entrySet()) {
+            level.setBlock(e.getKey(), e.getValue(), 3);
+        }
+        return true;
     }
 
     // ─────────────────────────────────────────────
@@ -110,11 +160,19 @@ public class PlayerBuildData {
     // 内部ヘルパー
     // ─────────────────────────────────────────────
 
-    private static Deque<List<BlockPos>> getUndoStack(UUID uuid) {
+    private static void pushUndo(UUID uuid, Map<BlockPos, BlockState> snapshot) {
+        Deque<Map<BlockPos, BlockState>> undo = getUndoStack(uuid);
+        undo.push(new LinkedHashMap<>(snapshot));
+        while (undo.size() > MAX_HISTORY) undo.pollLast();
+        // 新しい操作が積まれたら Redo をクリア
+        getRedoStack(uuid).clear();
+    }
+
+    private static Deque<Map<BlockPos, BlockState>> getUndoStack(UUID uuid) {
         return undoStacks.computeIfAbsent(uuid, k -> new ArrayDeque<>());
     }
 
-    private static Deque<List<BlockPos>> getRedoStack(UUID uuid) {
+    private static Deque<Map<BlockPos, BlockState>> getRedoStack(UUID uuid) {
         return redoStacks.computeIfAbsent(uuid, k -> new ArrayDeque<>());
     }
 }

@@ -4,6 +4,7 @@ import com.example.effortlesslite.EffortlessLite;
 import com.example.effortlesslite.build.BlockCalculator;
 import com.example.effortlesslite.build.BuildMode;
 import com.example.effortlesslite.build.BuildState;
+import com.example.effortlesslite.network.DeleteBlocksPacket;
 import com.example.effortlesslite.network.PlaceBlocksPacket;
 import com.example.effortlesslite.network.RedoPacket;
 import com.example.effortlesslite.network.SyncModePacket;
@@ -42,15 +43,22 @@ public class ClientBuildHandler {
             return;
         }
 
-        if (BuildState.isFirstPositionSet() && BuildState.mode != BuildMode.NORMAL) {
+        BuildMode mode = BuildState.mode;
+
+        if (BuildState.isFirstPositionSet() && mode != BuildMode.NORMAL && mode != BuildMode.ERASE_NORMAL) {
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
             if (hit.getType() == HitResult.Type.BLOCK) {
                 BlockHitResult blockHit = (BlockHitResult) hit;
-                BlockPos cursorPos = blockHit.getBlockPos().relative(blockHit.getDirection());
+
+                // 削除モード: クリックしたブロック自体を対象にする
+                // 配置モード: クリックした面の隣（空気の位置）を対象にする
+                BlockPos cursorPos = mode.isErase()
+                        ? blockHit.getBlockPos()
+                        : blockHit.getBlockPos().relative(blockHit.getDirection());
 
                 BlockPos playerPos = mc.player.blockPosition();
                 previewBlocks = BlockCalculator.calculate(
-                        BuildState.mode,
+                        mode.toBaseMode(),
                         BuildState.firstPos,
                         cursorPos,
                         BuildState.mirror,
@@ -109,18 +117,44 @@ public class ClientBuildHandler {
         if (mc.player == null)
             return;
 
-        // ★ 修正: 手持ちアイテムが BlockItem でない場合はバニラに任せる
-        boolean holdingBlock = mc.player.getMainHandItem().getItem() instanceof BlockItem;
+        BuildMode mode = BuildState.mode;
 
-        if (BuildState.mode == BuildMode.NORMAL) {
-            // BlockItem でない場合はキャンセルせずバニラ処理に流す
-            if (!holdingBlock) return;
-
+        // ── 単一ブロック削除（ERASE_NORMAL）──
+        if (mode == BuildMode.ERASE_NORMAL) {
             event.setCanceled(true);
             event.setSwingHand(false);
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-            if (hit.getType() != HitResult.Type.BLOCK)
-                return;
+            if (hit.getType() != HitResult.Type.BLOCK) return;
+            BlockHitResult blockHit = (BlockHitResult) hit;
+            BlockPos targetPos = blockHit.getBlockPos(); // 削除: クリックしたブロック自体
+            PacketDistributor.sendToServer(new DeleteBlocksPacket(List.of(targetPos)));
+            DimensionDisplayState.INSTANCE.onPlaced(targetPos, targetPos);
+            sendHudMessage(mc, "§c1 ブロックを削除しました");
+            return;
+        }
+
+        // ── 範囲削除（ERASE_LINE / WALL / FLOOR / CUBE）──
+        if (mode.isErase()) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+            HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
+            if (hit.getType() != HitResult.Type.BLOCK) return;
+            BlockHitResult blockHit = (BlockHitResult) hit;
+            BlockPos targetPos = blockHit.getBlockPos(); // 削除: クリックしたブロック自体
+            processEraseClick(mc, targetPos);
+            return;
+        }
+
+        // ── 以下は既存の配置処理（変更なし）──
+
+        boolean holdingBlock = mc.player.getMainHandItem().getItem() instanceof BlockItem;
+
+        if (mode == BuildMode.NORMAL) {
+            if (!holdingBlock) return;
+            event.setCanceled(true);
+            event.setSwingHand(false);
+            HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
+            if (hit.getType() != HitResult.Type.BLOCK) return;
             BlockHitResult blockHit = (BlockHitResult) hit;
             BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
             PacketDistributor.sendToServer(new PlaceBlocksPacket(List.of(targetPos)));
@@ -129,22 +163,47 @@ public class ClientBuildHandler {
             return;
         }
 
-        // Normal 以外のモードも同様に BlockItem でない場合はバニラに任せる
         if (!holdingBlock) return;
-
         event.setCanceled(true);
         event.setSwingHand(false);
 
         HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-        if (hit.getType() != HitResult.Type.BLOCK)
-            return;
+        if (hit.getType() != HitResult.Type.BLOCK) return;
 
         BlockHitResult blockHit = (BlockHitResult) hit;
         BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-
         processBuildClick(mc, targetPos);
     }
 
+    /** 範囲削除の2クリック処理 */
+    private static void processEraseClick(Minecraft mc, BlockPos targetPos) {
+        if (!BuildState.isFirstPositionSet()) {
+            BuildState.firstPos = targetPos;
+            sendHudMessage(mc, "§c削除始点: §f" + targetPos.toShortString()
+                    + " §7| 次のクリックで終点を設定");
+        } else {
+            BlockPos playerPos = mc.player.blockPosition();
+            List<BlockPos> positions = BlockCalculator.calculate(
+                    BuildState.mode.toBaseMode(),
+                    BuildState.firstPos,
+                    targetPos,
+                    BuildState.mirror,
+                    playerPos);
+
+            if (positions.isEmpty()) {
+                sendHudMessage(mc, "§c削除するブロックがありません");
+                return;
+            }
+
+            PacketDistributor.sendToServer(new DeleteBlocksPacket(positions));
+            DimensionDisplayState.INSTANCE.onPlaced(BuildState.firstPos, targetPos);
+            sendHudMessage(mc, "§c" + positions.size() + " ブロックを削除しました");
+
+            BuildState.reset();
+        }
+    }
+
+    /** 範囲配置の2クリック処理（既存・変更なし） */
     private static void processBuildClick(Minecraft mc, BlockPos targetPos) {
         if (!BuildState.isFirstPositionSet()) {
             BuildState.firstPos = targetPos;
