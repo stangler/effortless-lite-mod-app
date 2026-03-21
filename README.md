@@ -1,7 +1,24 @@
 # Effortless Lite
 
-Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。  
+Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 [Effortless Building](https://www.curseforge.com/minecraft/mc-mods/effortless-building) にインスパイアされた軽量版です。
+
+---
+
+## インストール方法
+
+### 必要なもの
+- Minecraft Java Edition 1.21.1
+- NeoForge 21.1.172
+
+### 手順
+
+1. [NeoForge 公式サイト](https://neoforged.net/) から **NeoForge 21.1.172** のインストーラーをダウンロードして実行する
+2. `effortlesslite-1.0.0.jar` を以下のフォルダに置く
+   ```
+   %appdata%\.minecraft\mods\
+   ```
+3. Minecraft Launcher で **NeoForge 1.21.1** プロファイルを選択して起動する
 
 ---
 
@@ -16,7 +33,7 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 | **ミラー** | プレイヤー位置を中心に X軸 / Z軸 / XZ軸 対称配置 |
 | **Undo/Redo** | 操作の取り消し・やり直し（最大20操作） |
 | **拡張リーチ** | 最大32ブロック先にブロックを配置可能 |
-| **プレビュー** | 配置予定ブロックをアウトラインで可視化 |
+| **プレビュー** | 配置予定ブロックをシアン色のアウトラインで可視化 |
 
 ---
 
@@ -38,9 +55,11 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 
 1. **[G]** キーでビルドモードを選ぶ（例: Wall）
 2. 手にブロックを持つ
-3. 壁の**始点**を右クリック → 画面にオレンジのアウトラインが表示される
+3. 壁の**始点**を右クリック → 画面にシアン色のアウトラインが表示される
 4. 壁の**終点**を右クリック → ブロックが一括配置される
 5. ミラーを使う場合は **[H]** で軸を設定してから上記を行う
+
+> **Normal モード**の場合は1クリックで即座に1ブロック配置されます。
 
 ---
 
@@ -93,7 +112,7 @@ gradlew.bat build
 ./gradlew build
 ```
 
-ビルド成功後、`build/libs/effortlesslite-1.0.0.jar` が生成されます。  
+ビルド成功後、`build/libs/effortlesslite-1.0.0.jar` が生成されます。
 これを `.minecraft/mods/` フォルダに置いてください。
 
 ### 開発時の起動
