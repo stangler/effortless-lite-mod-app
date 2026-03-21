@@ -7,9 +7,12 @@ import com.example.effortlesslite.build.BuildState;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -17,20 +20,11 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import org.joml.Matrix4f;
 
 import java.util.Collections;
 import java.util.List;
 
-/**
- * ブロックプレビュー (ゴーストブロック) のレンダラー
- *
- * 描画内容:
- *  - 始点未設定時 : プレイヤーが見ているブロックに白いアウトライン
- *  - 始点設定済み : 配置予定のブロック全てに水色のアウトライン
- *  - 始点マーカー : オレンジのアウトライン
- *
- * 描画タイミング: AFTER_TRANSLUCENT_BLOCKS (半透明ブロックの後)
- */
 @EventBusSubscriber(modid = EffortlessLite.MOD_ID,
         bus = EventBusSubscriber.Bus.GAME,
         value = Dist.CLIENT)
@@ -43,16 +37,13 @@ public class PreviewRenderer {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
-        // NORMAL モードでは何も描画しない
         if (BuildState.mode == BuildMode.NORMAL) return;
 
-        // プレビュー座標リストを取得
         List<BlockPos> previewPositions = getPreviewPositions(mc);
 
         PoseStack poseStack = event.getPoseStack();
         poseStack.pushPose();
 
-        // カメラ座標系に変換 (Minecraftのレンダリング基準)
         var camPos = mc.gameRenderer.getMainCamera().getPosition();
         poseStack.translate(-camPos.x, -camPos.y, -camPos.z);
 
@@ -60,35 +51,32 @@ public class PreviewRenderer {
                 .bufferSource()
                 .getBuffer(RenderType.lines());
 
-        // 始点マーカーを描画 (オレンジ)
+        // 始点マーカー (オレンジ)
         if (BuildState.isFirstPositionSet()) {
             AABB firstBox = new AABB(BuildState.firstPos).inflate(0.005);
             LevelRenderer.renderLineBox(poseStack, lineConsumer, firstBox,
-                    1.0f, 0.5f, 0.0f, 1.0f); // RGBA: オレンジ
+                    1.0f, 0.5f, 0.0f, 1.0f);
         }
 
-        // プレビューブロックを描画 (水色)
+        // プレビューブロック (水色)
         for (BlockPos pos : previewPositions) {
-            // 始点は既に描画済みなのでスキップ
             if (BuildState.isFirstPositionSet() && pos.equals(BuildState.firstPos)) continue;
-
             AABB box = new AABB(pos).inflate(0.002);
             LevelRenderer.renderLineBox(poseStack, lineConsumer, box,
-                    0.3f, 0.9f, 1.0f, 0.7f); // RGBA: 水色
+                    0.3f, 0.9f, 1.0f, 0.7f);
         }
 
-        // バッファをフラッシュ
         mc.renderBuffers().bufferSource().endBatch(RenderType.lines());
 
         poseStack.popPose();
+
+        // --- 追加: 3D寸法ラベル ---
+        DimensionDisplayState dim = DimensionDisplayState.INSTANCE;
+        if (dim.shouldDisplay()) {
+            renderDimensionLabels(event, poseStack, dim, camPos.x, camPos.y, camPos.z);
+        }
     }
 
-    /**
-     * プレビュー表示するブロック座標リストを取得する
-     *
-     * - 始点未設定: プレイヤーが向いているブロック1つ (ハイライト)
-     * - 始点設定済み: 計算された全配置予定ブロック
-     */
     private static List<BlockPos> getPreviewPositions(Minecraft mc) {
         HitResult hitResult = mc.player.pick(ClientBuildHandler.EXTENDED_REACH, 0.0f, false);
 
@@ -99,10 +87,8 @@ public class PreviewRenderer {
         BlockPos targetPos = ((BlockHitResult) hitResult).getBlockPos();
 
         if (!BuildState.isFirstPositionSet()) {
-            // 始点未設定 → ターゲットブロックのみハイライト
             return List.of(targetPos);
         } else {
-            // 始点設定済み → 全配置予定ブロックを表示
             BlockPos playerPos = mc.player.blockPosition();
             return BlockCalculator.calculate(
                     BuildState.mode,
@@ -112,5 +98,89 @@ public class PreviewRenderer {
                     playerPos
             );
         }
+    }
+
+    // -------------------------------------------------------
+    // 3D寸法ラベル描画（追加）
+    // -------------------------------------------------------
+
+    private static void renderDimensionLabels(RenderLevelStageEvent event,
+                                               PoseStack poseStack,
+                                               DimensionDisplayState dim,
+                                               double camX, double camY, double camZ) {
+        Minecraft mc = Minecraft.getInstance();
+        BlockPos c1 = dim.getCorner1();
+        BlockPos c2 = dim.getCorner2();
+
+        int minX = Math.min(c1.getX(), c2.getX());
+        int minY = Math.min(c1.getY(), c2.getY());
+        int minZ = Math.min(c1.getZ(), c2.getZ());
+        int maxX = Math.max(c1.getX(), c2.getX()) + 1;
+        int maxY = Math.max(c1.getY(), c2.getY()) + 1;
+        int maxZ = Math.max(c1.getZ(), c2.getZ()) + 1;
+
+        float alpha = dim.getFadeAlpha();
+        int a = Math.max(0, Math.min(255, (int)(alpha * 255)));
+        int textColor = (a << 24) | 0xFFFFFF;
+
+        MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
+
+        float midX = (minX + maxX) / 2.0f;
+        float midY = minY + 0.5f;
+        float midZ = (minZ + maxZ) / 2.0f;
+
+        // X方向の長さ（南・北辺）
+        String labelX = String.valueOf(dim.getSizeX());
+        drawLabel(poseStack, bufferSource, event, midX, midY, minZ - 0.6f, labelX, textColor, camX, camY, camZ);
+        drawLabel(poseStack, bufferSource, event, midX, midY, maxZ + 0.1f, labelX, textColor, camX, camY, camZ);
+
+        // Z方向の長さ（西・東辺）
+        String labelZ = String.valueOf(dim.getSizeZ());
+        drawLabel(poseStack, bufferSource, event, minX - 0.6f, midY, midZ, labelZ, textColor, camX, camY, camZ);
+        drawLabel(poseStack, bufferSource, event, maxX + 0.1f, midY, midZ, labelZ, textColor, camX, camY, camZ);
+
+        // Y方向の長さ（高さ2以上のみ）
+        if (dim.getSizeY() > 1) {
+            float midY2 = (minY + maxY) / 2.0f;
+            String labelY = String.valueOf(dim.getSizeY());
+            drawLabel(poseStack, bufferSource, event, minX - 0.6f, midY2, minZ - 0.6f, labelY, textColor, camX, camY, camZ);
+        }
+
+        bufferSource.endBatch();
+    }
+
+    private static void drawLabel(PoseStack poseStack,
+                                   MultiBufferSource bufferSource,
+                                   RenderLevelStageEvent event,
+                                   float wx, float wy, float wz,
+                                   String text, int textColor,
+                                   double camX, double camY, double camZ) {
+        Minecraft mc = Minecraft.getInstance();
+        poseStack.pushPose();
+
+        poseStack.translate(wx - camX, wy - camY, wz - camZ);
+        poseStack.mulPose(event.getCamera().rotation());
+
+        float scale = 0.025f;
+        poseStack.scale(-scale, -scale, scale);
+
+        Matrix4f matrix = poseStack.last().pose();
+        var font = mc.font;
+        float tx = -font.width(text) / 2.0f;
+        float ty = -font.lineHeight / 2.0f;
+
+        font.drawInBatch(
+                Component.literal(text),
+                tx, ty,
+                textColor,
+                false,
+                matrix,
+                bufferSource,
+                Font.DisplayMode.NORMAL,
+                0x80000000,
+                0xF000F0
+        );
+
+        poseStack.popPose();
     }
 }
