@@ -12,12 +12,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
@@ -26,6 +28,40 @@ import java.util.List;
 public class ClientBuildHandler {
 
     public static final double EXTENDED_REACH = 32.0;
+
+    /** PreviewRenderer から参照するプレビューブロックリスト */
+    public static List<BlockPos> previewBlocks = List.of();
+
+    @SubscribeEvent
+    public static void onClientTick(LevelTickEvent.Post event) {
+        DimensionDisplayState.INSTANCE.tick();
+
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.screen != null) {
+            previewBlocks = List.of();
+            return;
+        }
+
+        if (BuildState.isFirstPositionSet() && BuildState.mode != BuildMode.NORMAL) {
+            HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
+            if (hit.getType() == HitResult.Type.BLOCK) {
+                BlockHitResult blockHit = (BlockHitResult) hit;
+                BlockPos cursorPos = blockHit.getBlockPos().relative(blockHit.getDirection());
+
+                BlockPos playerPos = mc.player.blockPosition();
+                previewBlocks = BlockCalculator.calculate(
+                        BuildState.mode,
+                        BuildState.firstPos,
+                        cursorPos,
+                        BuildState.mirror,
+                        playerPos);
+
+                DimensionDisplayState.INSTANCE.updatePreview(BuildState.firstPos, cursorPos);
+            }
+        } else {
+            previewBlocks = List.of();
+        }
+    }
 
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
@@ -36,6 +72,7 @@ public class ClientBuildHandler {
         if (ModKeyBindings.MODE_TOGGLE.consumeClick()) {
             BuildState.cycleMode();
             PacketDistributor.sendToServer(new SyncModePacket(BuildState.mode.ordinal()));
+            DimensionDisplayState.INSTANCE.clearPreview();
             sendHudMessage(mc, "§fBuild Mode: §e" + BuildState.mode.getDisplayName());
         }
 
@@ -57,6 +94,7 @@ public class ClientBuildHandler {
         if (ModKeyBindings.CANCEL.consumeClick()) {
             if (BuildState.isFirstPositionSet()) {
                 BuildState.reset();
+                DimensionDisplayState.INSTANCE.clearPreview();
                 sendHudMessage(mc, "§cBuild cancelled");
             }
         }
@@ -71,7 +109,13 @@ public class ClientBuildHandler {
         if (mc.player == null)
             return;
 
+        // ★ 修正: 手持ちアイテムが BlockItem でない場合はバニラに任せる
+        boolean holdingBlock = mc.player.getMainHandItem().getItem() instanceof BlockItem;
+
         if (BuildState.mode == BuildMode.NORMAL) {
+            // BlockItem でない場合はキャンセルせずバニラ処理に流す
+            if (!holdingBlock) return;
+
             event.setCanceled(true);
             event.setSwingHand(false);
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
@@ -80,9 +124,13 @@ public class ClientBuildHandler {
             BlockHitResult blockHit = (BlockHitResult) hit;
             BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
             PacketDistributor.sendToServer(new PlaceBlocksPacket(List.of(targetPos)));
+            DimensionDisplayState.INSTANCE.onPlaced(targetPos, targetPos);
             sendHudMessage(mc, "§a1 ブロックを配置しました");
             return;
         }
+
+        // Normal 以外のモードも同様に BlockItem でない場合はバニラに任せる
+        if (!holdingBlock) return;
 
         event.setCanceled(true);
         event.setSwingHand(false);
@@ -91,7 +139,6 @@ public class ClientBuildHandler {
         if (hit.getType() != HitResult.Type.BLOCK)
             return;
 
-        // 修正: クリックした面の隣（ブロックを置く位置）を取得
         BlockHitResult blockHit = (BlockHitResult) hit;
         BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
 
@@ -118,6 +165,7 @@ public class ClientBuildHandler {
             }
 
             PacketDistributor.sendToServer(new PlaceBlocksPacket(positions));
+            DimensionDisplayState.INSTANCE.onPlaced(BuildState.firstPos, targetPos);
             sendHudMessage(mc, "§a" + positions.size() + " ブロックを配置しました");
 
             BuildState.reset();
