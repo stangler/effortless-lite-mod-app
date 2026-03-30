@@ -1,3 +1,6 @@
+**パス:** `README.md`
+
+````markdown
 # Effortless Lite
 
 Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
@@ -8,13 +11,15 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 ## インストール方法
 
 ### 必要なもの
-- Minecraft Java Edition 1.21.1
-- NeoForge 21.1.172
+
+* Minecraft Java Edition 1.21.1
+* NeoForge 21.1.172
 
 ### 手順
 
 1. [NeoForge 公式サイト](https://neoforged.net/) から **NeoForge 21.1.172** のインストーラーをダウンロードして実行する
 2. `effortlesslite-1.0.0.jar` を以下のフォルダに置く
+
    ```
    %appdata%\.minecraft\mods\
    ```
@@ -25,7 +30,7 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 ## 機能一覧
 
 | 機能 | 説明 |
-|------|------|
+| --- | --- |
 | **Line** | 始点と終点を結ぶ直線にブロックを配置 |
 | **Wall** | 始点と終点の間に垂直な壁を配置 |
 | **Floor** | 始点と終点で囲まれた水平な床を配置 |
@@ -34,7 +39,7 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 | **ミラー** | プレイヤー位置を中心に X軸 / Z軸 / XZ軸 対称配置 |
 | **Undo/Redo** | 配置・削除どちらも取り消し・やり直し可能（最大20操作）。ドアの上半分など複数ブロックで構成されるブロックも正しく取り消し |
 | **拡張リーチ** | 最大32ブロック先にブロックを配置・削除可能 |
-| **特殊ブロック対応** | ドア・階段・ガラスペインなど向きや形状が変わるブロックも、プレイヤーの向きを反映して正しく配置 |
+| **特殊ブロック対応** | ドア・階段・ガラスペイン・エンドロッドなど向きや形状が変わるブロックも、クリックした面とプレイヤーの向きを反映して正しく配置 |
 | **プレビュー** | 配置予定ブロックをシアン色、削除予定ブロックを赤色のアウトラインで可視化 |
 
 ---
@@ -42,7 +47,7 @@ Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
 ## キーバインド
 
 | キー | 操作 |
-|------|------|
+| --- | --- |
 | `G` | ビルドモードを切り替え (Normal → Line → Wall → Floor → Cube → 削除: Normal → 削除: Line → ...) |
 | `H` | ミラー軸を切り替え (None → X → Z → XZ → ...) |
 | `Z` | Undo（直前の配置・削除を取り消す） |
@@ -97,7 +102,7 @@ src/main/java/com/example/effortlesslite/
 │
 ├── network/
 │   ├── ModNetwork.java          # パケット登録
-│   ├── PlaceBlocksPacket.java   # C→S: ブロック配置リスト送信
+│   ├── PlaceBlocksPacket.java   # C→S: ブロック配置リスト・クリック面送信
 │   ├── DeleteBlocksPacket.java  # C→S: ブロック削除リスト送信
 │   ├── UndoPacket.java          # C→S: Undo要求
 │   ├── RedoPacket.java          # C→S: Redo要求
@@ -114,12 +119,13 @@ src/main/java/com/example/effortlesslite/
 ## ビルド方法
 
 ### 必要なもの
-- JDK 21
-- インターネット接続 (Gradle が NeoForge をダウンロード)
+
+* JDK 21
+* インターネット接続 (Gradle が NeoForge をダウンロード)
 
 ### コマンド
 
-```bash
+```
 # Windows
 gradlew.bat build
 
@@ -132,7 +138,7 @@ gradlew.bat build
 
 ### 開発時の起動
 
-```bash
+```
 # クライアント起動 (ゲームが立ち上がる)
 ./gradlew runClient
 
@@ -145,7 +151,7 @@ gradlew.bat build
 ## 制限事項
 
 | 項目 | 制限値 |
-|------|--------|
+| --- | --- |
 | 一度に配置・削除できるブロック数 | 最大 512 ブロック |
 | Undo/Redo 履歴数 | 最大 20 操作 |
 | 拡張リーチ距離 | 最大 32 ブロック |
@@ -154,13 +160,14 @@ gradlew.bat build
 
 ## 技術仕様
 
-- **Minecraft**: 1.21.1
-- **ModLoader**: NeoForge 21.1.172
-- **Java**: 21
-- **ブロック座標計算**: `BlockCalculator.java` でモードごとにアルゴリズムを実装
-- **ネットワーク**: C→S のみの単方向通信 (クライアントで計算 → サーバーで検証・配置/削除)
-- **ミラー**: プレイヤーのブロック座標を中心に対称座標を生成
-- **Undo/Redo**: 配置・削除どちらも `Map<BlockPos, BlockState>` で統一管理（削除Undoは元のブロック状態を復元）
+* **Minecraft**: 1.21.1
+* **ModLoader**: NeoForge 21.1.172
+* **Java**: 21
+* **ブロック座標計算**: `BlockCalculator.java` でモードごとにアルゴリズムを実装
+* **ネットワーク**: C→S のみの単方向通信 (クライアントで計算 → サーバーで検証・配置/削除)
+* **ミラー**: プレイヤーのブロック座標を中心に対称座標を生成
+* **Undo/Redo**: 配置・削除どちらも `Map<BlockPos, BlockState>` で統一管理（削除Undoは元のブロック状態を復元）
+* **ブロックの向き**: クライアントがクリックした面 (`Direction`) をパケットでサーバーに送信し、`BlockPlaceContext` に反映
 
 ---
 
@@ -186,3 +193,4 @@ private static void calculateCircle(List<BlockPos> positions, BlockPos center, i
     }
 }
 ```
+````

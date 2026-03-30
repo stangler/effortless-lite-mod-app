@@ -31,22 +31,22 @@ public class ServerBuildHandler {
                 return;
             ServerLevel level = player.serverLevel();
 
-            // プレイヤーの手持ちアイテムからブロックを取得
             ItemStack heldItem = player.getMainHandItem();
             if (!(heldItem.getItem() instanceof BlockItem blockItem))
                 return;
 
             List<BlockPos> positions = packet.positions();
+            Direction clickedFace = packet.clickedFace();
             List<BlockPos> placed = new ArrayList<>();
 
             for (BlockPos pos : positions) {
                 if (!level.getBlockState(pos).isAir())
                     continue;
 
-                // 各ポジションに対してプレイヤーの向きを反映した BlockPlaceContext を生成
+                // クライアントから受け取った clickedFace を使って BlockPlaceContext を生成
                 BlockHitResult hitResult = new BlockHitResult(
                         Vec3.atCenterOf(pos),
-                        Direction.UP,
+                        clickedFace,
                         pos,
                         false);
                 BlockPlaceContext placeCtx = new BlockPlaceContext(
@@ -60,7 +60,6 @@ public class ServerBuildHandler {
                 boolean belowWasAir = level.getBlockState(pos.below()).isAir();
 
                 level.setBlock(pos, stateToPlace, 3);
-                // ドアなど setPlacedBy が必要なブロックの上半分等を生成
                 blockItem.getBlock().setPlacedBy(level, pos, stateToPlace, player, heldItem);
                 placed.add(pos.immutable());
 
@@ -80,7 +79,7 @@ public class ServerBuildHandler {
     }
 
     // -------------------------------------------------------
-    // ブロック削除（新規）
+    // ブロック削除
     // -------------------------------------------------------
     public static void handleDeleteBlocks(DeleteBlocksPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
@@ -90,7 +89,6 @@ public class ServerBuildHandler {
 
             List<BlockPos> positions = packet.positions();
 
-            // 削除前のスナップショットを取る（空気以外のブロックのみ）
             Map<BlockPos, BlockState> snapshot = new LinkedHashMap<>();
             for (BlockPos pos : positions) {
                 BlockState state = level.getBlockState(pos);
@@ -102,18 +100,16 @@ public class ServerBuildHandler {
             if (snapshot.isEmpty())
                 return;
 
-            // ブロックを削除（空気に置換）
             for (BlockPos pos : snapshot.keySet()) {
                 level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             }
 
-            // 削除前の状態をUndoスタックに積む
             PlayerBuildData.pushEraseUndo(player.getUUID(), snapshot);
         });
     }
 
     // -------------------------------------------------------
-    // Undo（UndoPacket.java の呼び出し形式に合わせて IPayloadContext のみ）
+    // Undo
     // -------------------------------------------------------
     public static void handleUndo(IPayloadContext context) {
         context.enqueueWork(() -> {
@@ -124,7 +120,7 @@ public class ServerBuildHandler {
     }
 
     // -------------------------------------------------------
-    // Redo（RedoPacket.java の呼び出し形式に合わせて IPayloadContext のみ）
+    // Redo
     // -------------------------------------------------------
     public static void handleRedo(IPayloadContext context) {
         context.enqueueWork(() -> {
