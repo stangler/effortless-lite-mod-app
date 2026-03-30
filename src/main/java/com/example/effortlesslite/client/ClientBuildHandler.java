@@ -11,6 +11,7 @@ import com.example.effortlesslite.network.SyncModePacket;
 import com.example.effortlesslite.network.UndoPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.BlockItem;
@@ -124,9 +125,10 @@ public class ClientBuildHandler {
             event.setCanceled(true);
             event.setSwingHand(false);
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-            if (hit.getType() != HitResult.Type.BLOCK) return;
+            if (hit.getType() != HitResult.Type.BLOCK)
+                return;
             BlockHitResult blockHit = (BlockHitResult) hit;
-            BlockPos targetPos = blockHit.getBlockPos(); // 削除: クリックしたブロック自体
+            BlockPos targetPos = blockHit.getBlockPos();
             PacketDistributor.sendToServer(new DeleteBlocksPacket(List.of(targetPos)));
             DimensionDisplayState.INSTANCE.onPlaced(targetPos, targetPos);
             sendHudMessage(mc, "§c1 ブロックを削除しました");
@@ -138,41 +140,46 @@ public class ClientBuildHandler {
             event.setCanceled(true);
             event.setSwingHand(false);
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-            if (hit.getType() != HitResult.Type.BLOCK) return;
+            if (hit.getType() != HitResult.Type.BLOCK)
+                return;
             BlockHitResult blockHit = (BlockHitResult) hit;
-            BlockPos targetPos = blockHit.getBlockPos(); // 削除: クリックしたブロック自体
+            BlockPos targetPos = blockHit.getBlockPos();
             processEraseClick(mc, targetPos);
             return;
         }
 
-        // ── 以下は既存の配置処理（変更なし）──
+        // ── 以下は配置処理 ──
 
         boolean holdingBlock = mc.player.getMainHandItem().getItem() instanceof BlockItem;
 
         if (mode == BuildMode.NORMAL) {
-            if (!holdingBlock) return;
+            if (!holdingBlock)
+                return;
             event.setCanceled(true);
             event.setSwingHand(false);
             HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-            if (hit.getType() != HitResult.Type.BLOCK) return;
+            if (hit.getType() != HitResult.Type.BLOCK)
+                return;
             BlockHitResult blockHit = (BlockHitResult) hit;
             BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-            PacketDistributor.sendToServer(new PlaceBlocksPacket(List.of(targetPos)));
+            PacketDistributor.sendToServer(new PlaceBlocksPacket(List.of(targetPos), blockHit.getDirection()));
             DimensionDisplayState.INSTANCE.onPlaced(targetPos, targetPos);
             sendHudMessage(mc, "§a1 ブロックを配置しました");
             return;
         }
 
-        if (!holdingBlock) return;
+        if (!holdingBlock)
+            return;
         event.setCanceled(true);
         event.setSwingHand(false);
 
         HitResult hit = mc.player.pick(EXTENDED_REACH, 0.0f, false);
-        if (hit.getType() != HitResult.Type.BLOCK) return;
+        if (hit.getType() != HitResult.Type.BLOCK)
+            return;
 
         BlockHitResult blockHit = (BlockHitResult) hit;
         BlockPos targetPos = blockHit.getBlockPos().relative(blockHit.getDirection());
-        processBuildClick(mc, targetPos);
+        processBuildClick(mc, targetPos, blockHit.getDirection());
     }
 
     /** 範囲削除の2クリック処理 */
@@ -203,8 +210,8 @@ public class ClientBuildHandler {
         }
     }
 
-    /** 範囲配置の2クリック処理（既存・変更なし） */
-    private static void processBuildClick(Minecraft mc, BlockPos targetPos) {
+    /** 範囲配置の2クリック処理 */
+    private static void processBuildClick(Minecraft mc, BlockPos targetPos, Direction direction) {
         if (!BuildState.isFirstPositionSet()) {
             BuildState.firstPos = targetPos;
             sendHudMessage(mc, "§aStart: §f" + targetPos.toShortString()
@@ -223,7 +230,7 @@ public class ClientBuildHandler {
                 return;
             }
 
-            PacketDistributor.sendToServer(new PlaceBlocksPacket(positions));
+            PacketDistributor.sendToServer(new PlaceBlocksPacket(positions, direction));
             DimensionDisplayState.INSTANCE.onPlaced(BuildState.firstPos, targetPos);
             sendHudMessage(mc, "§a" + positions.size() + " ブロックを配置しました");
 
