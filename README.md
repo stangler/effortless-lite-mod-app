@@ -1,6 +1,3 @@
-**パス:** `README.md`
-
-````markdown
 # Effortless Lite
 
 Minecraft 1.21.1 / NeoForge 向けの簡易建築支援Mod。
@@ -193,4 +190,3 @@ private static void calculateCircle(List<BlockPos> positions, BlockPos center, i
     }
 }
 ```
-````
